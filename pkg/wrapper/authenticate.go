@@ -31,7 +31,7 @@ type SpotifyConf struct {
 	} `yaml:"Spotify"`
 }
 type SpotifyWrapper interface {
-	LoginAccount()
+	LoginAccount() (string, error)
 	completeAuth(res http.ResponseWriter, req *http.Request)
 }
 
@@ -55,7 +55,6 @@ func NewRest() SpotifyWrapper {
 		log.Fatalf("Error in unmarshalling %+v", err)
 	}
 	redirectURL := "http://localhost:8080/callback"
-	state := "active"
 	ch := make(chan *spotify.Client)
 
 	return &wrappercontext{
@@ -63,15 +62,16 @@ func NewRest() SpotifyWrapper {
 		Key:         config.Spotify.Credentials.Key,
 		Secret:      config.Spotify.Credentials.Secret,
 		Version:     "2",
-		State:       state,
+		State:       "Active",
 		AuthURL:     "None",
 		Auth:        spotify.NewAuthenticator(redirectURL, spotify.ScopeUserReadPrivate),
 		Client:      ch,
 	}
 }
 
-func (w *wrappercontext) LoginAccount() {
+func (w *wrappercontext) LoginAccount() (string, error) {
 	// first start an HTTP server
+	w.Auth.SetAuthInfo(w.Key, w.Secret)
 	http.HandleFunc("/callback", w.completeAuth)
 	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
 		log.Println("Got request for:", req.URL.String())
@@ -79,21 +79,22 @@ func (w *wrappercontext) LoginAccount() {
 	go http.ListenAndServe(":8080", nil)
 
 	url := w.Auth.AuthURL(w.State)
-	fmt.Println("Please log in to Spotify by visiting the following page in your browser:", url)
-
+	w.AuthURL = url
+	// fmt.Println("Please log in to Spotify by visiting the following page in your browser:", url)
 	// wait for auth to complete
 	client := <-w.Client
 
 	// use the client to make calls that require authorization
 	user, err := client.CurrentUser()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("error in user client %+v", err)
 	}
 	fmt.Println("You are logged in as:", user.ID)
+
+	return url, nil
 }
 
 func (w *wrappercontext) completeAuth(res http.ResponseWriter, req *http.Request) {
-	w.Auth.SetAuthInfo(w.Key, w.Secret)
 	tok, err := w.Auth.Token(w.State, req)
 	if err != nil {
 		http.Error(res, "Couldn't get token", http.StatusForbidden)
