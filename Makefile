@@ -15,4 +15,4 @@ tests: deps
 
 # Build all executables
 all: deps
-	go build -o spotifyplaylistcreator.out $(CWD)/cmd/SpotifyPlaylistCreator
+	go build -o spotifycleanup.out $(CWD)/cmd/SpotifyCleanUp

@@ -26,5 +26,5 @@ make all
 ```
 then running
 ```
-./spotifyplaylistcreator.out
+./spotifycleanup.out
 ```

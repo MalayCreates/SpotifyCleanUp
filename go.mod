@@ -1,4 +1,4 @@
-module github.com/MalayCreates/SpotifyPlaylistCreator
+module github.com/MalayCreates/SpotifyCleanUp
 
 go 1.16
 
