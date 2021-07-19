@@ -1,4 +1,4 @@
-config/spotify.yaml
+configs/spotify.yaml
 .idea
 .go/
 *.out
