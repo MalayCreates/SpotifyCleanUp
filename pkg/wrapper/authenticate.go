@@ -32,10 +32,20 @@ type SpotifyConf struct {
 		} `yaml:"Credentials"`
 	} `yaml:"Spotify"`
 }
+
+type playlist struct {
+	tracks     []string
+	trackTags  [][]string
+	categories []string
+}
+
 type SpotifyWrapper interface {
 	LoginAccount() (*spotify.Client, error)
 	completeAuth(res http.ResponseWriter, req *http.Request)
-	GetPlaylists()
+}
+
+type Playlists interface {
+	GetAggregatePlaylist(*spotify.Client)
 }
 
 func NewRest() SpotifyWrapper {
@@ -115,4 +125,27 @@ func (w *wrappercontext) completeAuth(res http.ResponseWriter, req *http.Request
 	client := w.Auth.NewClient(tok)
 	fmt.Fprintf(res, "Login Completed!")
 	w.Channel <- &client
+}
+
+func NewPlaylists() Playlists {
+	return &playlist{make([]string, 0), make([][]string, 0), make([]string, 0)}
+}
+
+func (p *playlist) GetAggregatePlaylist(client *spotify.Client) {
+	user, err := client.CurrentUser()
+	// var playlistIDs []spotify.ID
+	if err != nil {
+		log.Fatalf("Error getting current user, %+v", err)
+	}
+	pl, err := client.GetPlaylistsForUser(user.ID)
+	if err != nil{
+		log.Fatalf("Error getting user playlists %+v",err)
+	}
+	for i := range(pl.Playlists){
+		// playlistIDs = append(playlistIDs, pl.Playlists[i].ID)
+		tracks, _ := client.GetPlaylistTracks(pl.Playlists[i].ID)
+		for j := range(tracks.Tracks){
+			log.Println(tracks.Tracks[j].Track.SimpleTrack.Name)
+		}
+	}
 }

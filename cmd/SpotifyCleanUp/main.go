@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/MalayCreates/SpotifyCleanUp/pkg/grabber"
 	"github.com/MalayCreates/SpotifyCleanUp/pkg/wrapper"
 )
 
 var spotifyRest wrapper.SpotifyWrapper
-var playlist grabber.Playlists
+var playlist wrapper.Playlists
 
 func main(){
 	fmt.Println("Starting the app")
@@ -20,6 +19,6 @@ func main(){
 		log.Fatalf("Error logging in")
 	}
 
-	playlist = grabber.NewPlaylists()
+	playlist = wrapper.NewPlaylists()
 	playlist.GetAggregatePlaylist(client)
 }
