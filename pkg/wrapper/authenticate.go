@@ -19,7 +19,9 @@ type wrappercontext struct {
 	State       string
 	AuthURL     string
 	Auth        spotify.Authenticator
-	Client      chan *spotify.Client
+	Channel     chan *spotify.Client
+	Client      *spotify.Client
+	UserID      string
 }
 
 type SpotifyConf struct {
@@ -31,8 +33,9 @@ type SpotifyConf struct {
 	} `yaml:"Spotify"`
 }
 type SpotifyWrapper interface {
-	LoginAccount() (string, error)
+	LoginAccount() (*spotify.Client, error)
 	completeAuth(res http.ResponseWriter, req *http.Request)
+	GetPlaylists()
 }
 
 func NewRest() SpotifyWrapper {
@@ -65,11 +68,13 @@ func NewRest() SpotifyWrapper {
 		State:       "Active",
 		AuthURL:     "None",
 		Auth:        spotify.NewAuthenticator(redirectURL, spotify.ScopeUserReadPrivate),
-		Client:      ch,
+		Channel:     ch,
+		Client:      nil,
+		UserID:      "None",
 	}
 }
 
-func (w *wrappercontext) LoginAccount() (string, error) {
+func (w *wrappercontext) LoginAccount() (*spotify.Client, error) {
 	// first start an HTTP server
 	w.Auth.SetAuthInfo(w.Key, w.Secret)
 	http.HandleFunc("/callback", w.completeAuth)
@@ -82,16 +87,18 @@ func (w *wrappercontext) LoginAccount() (string, error) {
 	w.AuthURL = url
 	// fmt.Println("Please log in to Spotify by visiting the following page in your browser:", url)
 	// wait for auth to complete
-	client := <-w.Client
+	client := <-w.Channel
 
 	// use the client to make calls that require authorization
 	user, err := client.CurrentUser()
 	if err != nil {
 		log.Fatalf("error in user client %+v", err)
 	}
-	fmt.Println("You are logged in as:", user.ID)
+	w.UserID = user.ID
+	fmt.Println("You are logged in as:", w.UserID)
+	w.Client = client
 
-	return url, nil
+	return w.Client, nil
 }
 
 func (w *wrappercontext) completeAuth(res http.ResponseWriter, req *http.Request) {
@@ -107,5 +114,5 @@ func (w *wrappercontext) completeAuth(res http.ResponseWriter, req *http.Request
 	// use the token to get an authenticated client
 	client := w.Auth.NewClient(tok)
 	fmt.Fprintf(res, "Login Completed!")
-	w.Client <- &client
+	w.Channel <- &client
 }
