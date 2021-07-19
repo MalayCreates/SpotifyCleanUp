@@ -1,7 +1,0 @@
-__data="---
-Spotify:
-  Credentials:
-    Key: $(read -p "Key:" key; echo "\"$key\"")
-    Secret: $(read -p "Secret:" secret; echo "\"$secret\"")
-
-echo "$__data" > `dirname $0`/spotify.yaml
