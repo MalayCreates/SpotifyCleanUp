@@ -19,6 +19,6 @@ func main(){
 		log.Fatalf("Error logging in")
 	}
 
-	playlist = wrapper.NewPlaylists()
+	playlist = wrapper.NewPlaylist()
 	playlist.GetAggregatePlaylist(client)
 }
