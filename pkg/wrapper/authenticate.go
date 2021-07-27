@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/zmb3/spotify"
 	"gopkg.in/yaml.v3"
@@ -41,14 +43,14 @@ type playlist struct {
 	playlistIDs []spotify.ID
 	tracks      []spotify.ID
 	artistIDs   []spotify.ID
-	trackTags   [][]string
+	trackTags   map[spotify.ID][]string
 	categories  []string
 	Client      *spotify.Client
 }
 
 // SpotifyWrapper is the interface for Logging in and completing authentication, crucial for getting a client.
 type SpotifyWrapper interface {
-	LoginAccount() (*spotify.Client, error)
+	LoginAccount() (spotify.ID, error)
 	completeAuth(res http.ResponseWriter, req *http.Request)
 	NewPlaylist() Playlists
 }
@@ -56,7 +58,8 @@ type SpotifyWrapper interface {
 // Playlists is the interface for aggregating, classfiying, and creating playlists
 type Playlists interface {
 	GetAggregatePlaylist() error
-	CreateCategories([]spotify.ID) error
+	CreateCategories() error
+	CreatePlaylists(userID spotify.ID) error
 }
 
 // NewRest will initialize a new rest through the wrapper using the credentials provided in spotify.YAML
@@ -91,7 +94,7 @@ func NewRest() SpotifyWrapper {
 		Version:     "2",
 		State:       "Active",
 		AuthURL:     "None",
-		Auth:        spotify.NewAuthenticator(redirectURL, spotify.ScopeUserReadPrivate, spotify.ScopePlaylistModifyPublic),
+		Auth:        spotify.NewAuthenticator(redirectURL, spotify.ScopePlaylistModifyPrivate,),
 		Channel:     ch,
 		Client:      nil,
 		UserID:      "None",
@@ -101,7 +104,7 @@ func NewRest() SpotifyWrapper {
 // LoginAccount will take a while to work initially, but after the URL is presented the first time it can be used over and over.
 // It is recommended to run program then click link rather than click link then run program.
 // LoginAccount will work in tandem with CompleteAuth as there is a call to completeAuth in LoginAccount.
-func (w *wrappercontext) LoginAccount() (*spotify.Client, error) {
+func (w *wrappercontext) LoginAccount() (spotify.ID, error) {
 	// first start an HTTP server
 	w.Auth.SetAuthInfo(w.Key, w.Secret)
 	http.HandleFunc("/callback", w.completeAuth)
@@ -125,7 +128,7 @@ func (w *wrappercontext) LoginAccount() (*spotify.Client, error) {
 	fmt.Println("You are logged in as:", w.UserID)
 	w.Client = client
 
-	return w.Client, nil
+	return spotify.ID(w.UserID), nil
 }
 
 // completeAuth is used to pass through http.HandleFunc and will use the state, Auth, and channel from the wrappercontext struct, w.
@@ -147,7 +150,7 @@ func (w *wrappercontext) completeAuth(res http.ResponseWriter, req *http.Request
 
 // NewPlaylist will create a new playlists struct with intialized type arrrays.
 func (w *wrappercontext) NewPlaylist() Playlists {
-	return &playlist{make([]spotify.ID, 0),make([]spotify.ID, 0), make([]spotify.ID, 0), make([][]string, 0), make([]string, 0), w.Client}
+	return &playlist{make([]spotify.ID, 0), make([]spotify.ID, 0), make([]spotify.ID, 0), make(map[spotify.ID][]string), make([]string, 0), w.Client}
 }
 
 // GetAggregatePlaylist gets all playlists for a user that they make visible on their profile, and will grab every trackID.
@@ -180,6 +183,7 @@ func (p *playlist) GetAggregatePlaylist() error {
 					}
 				}
 				if !duplicate {
+					p.trackTags[trackID] = []string{}
 					p.tracks = append(p.tracks, trackID)
 				}
 			}
@@ -197,53 +201,78 @@ func (p *playlist) GetAggregatePlaylist() error {
 	return nil
 }
 
-func (p *playlist) CreateCategories(trackIDs []spotify.ID) error {
-	// availableGenres := [...]string {"acoustic", "afrobeat", "alt rock", "alternative", "ambient", 
-	// "anime", "black metal", "bluegrass", "blues", "bossanova", "brazil", "breakbeat", "british", "cantopop",
-	// "chicago house", "children", "chill", "classical", "club", "comedy", "country", "dance", 
-	// "dancehall", "death metal", "deep house", "detroit techno", "disco", "disney", "drum and bass", 
-	// "dub", "dubstep", "edm", "electro", "electronic", "emo", "folk", "forro", "french", "funk", "garage",
-	// "german", "gospel", "goth", "grindcore", "groove", "grunge", "guitar", "happy", "hard rock", "hardcore", 
-	// "hardstyle", "heavy metal", "hip hop", "holidays", "honky tonk", "house", "idm", "indian", "indie", 
-	// "indie pop", "industrial", "iranian", "j dance", "j idol", "j pop", "j rock", "jazz", "k pop", "kids", 
-	// "latin", "latino", "malay", "mandopop", "metal", "metal misc", "metalcore", "minimal techno", "movies", 
-	// "mpb", "new age", "new release", "opera", "pagode", "party", "philippines-opm", "piano", "pop", "pop film", 
-	// "post dubstep", "power pop", "progressive house", "psych rock", "punk", "punk rock", "r&b", "rainy day", 
-	// "reggae", "reggaeton", "road trip", "rock", "rock n roll", "rockabilly", "romance", "sad", "salsa", "samba", 
-	// "sertanejo", "show tunes", "singer songwriter", "ska", "sleep", "songwriter", "soul", "soundtracks", "spanish", 
-	// "study", "summer", "swedish", "synth pop", "tango", "techno", "trance", "trip hop", "turkish", "work out", 
-	// "world music"}
-	pages := (len(p.tracks) / 50)
-	// lastPage := len(p.tracks)%50
-	for i := 1; i <= int(pages); i++ {
-		trackWindow, err := p.Client.GetTracks((p.tracks[((i - 1) * 50):(i * 50)])...)
-		if err != nil {
-			log.Fatalf("Error getting track details %+v", err)
-		}
-		for j := range trackWindow {
-			p.artistIDs = append(p.artistIDs,(trackWindow[j].SimpleTrack.Artists[0].ID))
-		}
-		artistWindow, err := p.Client.GetArtists((p.artistIDs[((i - 1) * 50):(i * 50)])...)
-		// artistWindow, err := p.Client.GetArtists((p.artistIDs[0:3 ])...)
-		if err != nil{
-			log.Fatalf("Error getting artist details")
-		}
-		for j := range(artistWindow){
-			genres := artistWindow[j].Genres
-			for g := range(genres){
-				duplicate := false
-				for current := range(p.categories){
-					if p.categories[current] == genres[g]{
-						duplicate = true
-						break
-					}
+func (p *playlist) CreateCategories() error {
+
+	pages := float64(len(p.tracks) / 50)
+	lastPage := len(p.tracks) % 50
+	for i := 1; i <= int(math.Ceil(pages)); i++ {
+		if i != int(math.Ceil(pages)) || lastPage == 0 {
+			trackWindow, err := p.Client.GetTracks((p.tracks[((i - 1) * 50):(i * 50)])...)
+			if err != nil {
+				log.Fatalf("Error getting track details %+v", err)
+			}
+			for j := range trackWindow {
+				p.artistIDs = append(p.artistIDs, (trackWindow[j].SimpleTrack.Artists[0].ID))
+			}
+			artistWindow, err := p.Client.GetArtists((p.artistIDs[((i - 1) * 50):(i * 50)])...)
+			// artistWindow, err := p.Client.GetArtists((p.artistIDs[0:3 ])...)
+			if err != nil {
+				log.Fatalf("Error getting artist details")
+			}
+			for j := range artistWindow {
+				genres := artistWindow[j].Genres
+				for g := range genres {
+					p.categories = append(p.categories, genres[g])
+					p.trackTags[p.tracks[((i-1)*50)+j]] = append(p.trackTags[p.tracks[((i-1)*50)+j]], genres[g])
 				}
-				if !duplicate{
-					p.categories =append(p.categories, genres[g])
+			}
+		} else {
+			trackWindow, err := p.Client.GetTracks((p.tracks[(len(p.tracks) - 1 - lastPage):(len(p.tracks))])...)
+			if err != nil {
+				log.Fatalf("Error getting track details %+v", err)
+			}
+			for j := range trackWindow {
+				p.artistIDs = append(p.artistIDs, (trackWindow[j].SimpleTrack.Artists[0].ID))
+			}
+			artistWindow, err := p.Client.GetArtists((p.artistIDs[(len(p.tracks) - 1 - lastPage):(len(p.tracks))])...)
+			// artistWindow, err := p.Client.GetArtists((p.artistIDs[0:3 ])...)
+			if err != nil {
+				log.Fatalf("Error getting artist details")
+			}
+			for j := range artistWindow {
+				genres := artistWindow[j].Genres
+				for g := range genres {
+					p.categories = append(p.categories, genres[g])
+					p.trackTags[p.tracks[((i-1)*50)+j]] = append(p.trackTags[p.tracks[((i-1)*50)+j]], genres[g])
 				}
 			}
 		}
 	}
-	log.Println(p.categories)
+	log.Printf("%d Tracks have been tagged", len(p.trackTags))
+	return nil
+}
+
+func (p *playlist) CreatePlaylists(userID spotify.ID) error {
+	keys := make(map[string]bool)
+    list := []string{}
+    for _, entry := range p.categories {
+        if _, value := keys[entry]; !value {
+            keys[entry] = true
+            list = append(list, entry)
+        }
+    }
+	p.categories = list
+
+	for _, ele := range p.categories{
+		playlistName := strings.Title(strings.ToLower(ele))
+		playlistName = strings.ReplaceAll(playlistName," ","")
+		log.Printf("_%s\n",playlistName)
+		f, err := p.Client.CreatePlaylistForUser(string(userID),playlistName,playlistName,false)
+		log.Println(f)
+		if err != nil{
+			log.Fatalf("error creating playlist %+v", err)
+		}
+	}
+	
 	return nil
 }

@@ -1,17 +1,15 @@
 package main
 
-import(
-"log"
+import (
+	"log"
 
-"github.com/MalayCreates/SpotifyCleanUp/pkg/wrapper"
-
-"github.com/zmb3/spotify"
+	"github.com/MalayCreates/SpotifyCleanUp/pkg/wrapper"
 )
 
 // var spotifyRest wrapper.SpotifyWrapper
 // var playlist wrapper.Playlists
 
-func main(){
+func main() {
 
 	var spotifyRest = wrapper.NewRest()
 
@@ -26,8 +24,7 @@ func main(){
 		log.Fatalf("Error in GetAggregatePlaylist, %+v", err)
 	}
 
-	var hmm []spotify.ID
-	err = spotifyPlaylist.CreateCategories(hmm)
+	err = spotifyPlaylist.CreateCategories()
 	if err != nil {
 		log.Fatalf("Error in TestCreateCategories, %+v", err)
 	}

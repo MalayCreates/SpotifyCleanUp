@@ -3,19 +3,15 @@ package wrapper
 import (
 	"log"
 	"testing"
-
-	"github.com/zmb3/spotify"
 )
 
 // Testing used a sample playlist containing a limited amoount of songs
 // This testing is no good, need to redo it
 
-
 var spotifyRest = NewRest()
 
-
 func TestGetAggregatePlaylist(t *testing.T) {
-	_, err := spotifyRest.LoginAccount()
+	id, err := spotifyRest.LoginAccount()
 	if err != nil {
 		log.Fatalf("Error logging in, %+v", err)
 	}
@@ -26,10 +22,14 @@ func TestGetAggregatePlaylist(t *testing.T) {
 		log.Fatalf("Error in GetAggregatePlaylist, %+v", err)
 	}
 
-	var shit []spotify.ID
-	err = spotifyPlaylist.CreateCategories(shit)
+	err = spotifyPlaylist.CreateCategories()
 	if err != nil {
 		t.Errorf("Error in TestCreateCategories, %+v", err)
+	}
+
+	err = spotifyPlaylist.CreatePlaylists(id)
+	if err != nil{
+		t.Errorf("Error in CreatePlaylists %+v",err)
 	}
 }
 
